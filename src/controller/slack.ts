@@ -1,9 +1,8 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
-import dotenv from 'dotenv';
 import SlackToken from '../model/slack';
 
-dotenv.config();
+
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -15,15 +14,19 @@ const {
   SLACK_REDIRECT_URI
 } = process.env;
 
-export const installSlackApp = (req: Request, res: Response) => {
+console.log( "slack config" , SLACK_CLIENT_ID , SLACK_CLIENT_SECRET , SLACK_REDIRECT_URI);
+
+
+export const installSlackApp = (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId as string;
   const scopes = ['chat:write']; // only notification scope
-  const authUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes.join(',')}&redirect_uri=${encodeURIComponent(SLACK_REDIRECT_URI || '')}`;
+  const authUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&scope=${scopes.join(',')}&redirect_uri=${encodeURIComponent(SLACK_REDIRECT_URI || '')}&userId=${encodeURIComponent(userId)}`;
   res.redirect(authUrl);
 };
 
 export const handleOAuthCallback = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const code = req.query.code as string;
-  const userId = req.userId; // 👈 Injected by auth middleware
+  const userId = req.query.userId; // 👈 Injected by auth middleware
 
   if (!code) {
     res.status(400).send('Missing authorization code.');
