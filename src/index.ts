@@ -28,7 +28,7 @@ app.use(express.json());
 app.use("/api/user", userRouter);
 app.use("/api/emailcred", emailCredRouter);
 app.use("/api/email", emailRouter);
-app.use('/slack', SlackRouter);
+app.use('/api/slack', SlackRouter);
 
 connectDB();
 
