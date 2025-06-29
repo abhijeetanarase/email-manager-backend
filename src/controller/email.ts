@@ -10,6 +10,11 @@ import User from "../model/user";
 interface AuthenticatedRequest extends Request {
   userId?: string;
 }
+interface EmailQuery {
+  search?: string;
+  n?: number; // Number of items per page
+  p?: number; // Page number
+}
 
 // GET /api/email/:credentialId
 export const getEmailsByCredentialId = async (
@@ -19,6 +24,7 @@ export const getEmailsByCredentialId = async (
   try {
     const userId = req.userId;
     const credentialId = req.params.id;
+    const  {search="",n=20 , p=1 }:EmailQuery = req.query;
 
     // Ensure the credential belongs to the user
     const cred = await EmailCredential.findOne({
@@ -31,11 +37,15 @@ export const getEmailsByCredentialId = async (
         .json({ message: "Credential not found or not authorized" });
     }
 
-    const emails = await Email.find({ credential: credentialId })
-      .skip(0)
-      .limit(50)
+    const filters = { credential: credentialId , subject : { $regex: search , $options: 'i' } }
+
+    const emails = await Email.find(filters)
+      .skip((p-1)*n)
+      .limit(n)
       .sort({ receivedAt: -1 });
-    res.json({ emails });
+    const totalCount = await Email.countDocuments(filters);
+    const totalPages = Math.ceil(totalCount / n);
+    res.json({ emails , totalCount , totalPages , currentPage: p });
   } catch (error) {
     res.status(500).json({ message: "Error fetching emails", error });
   }

@@ -48,3 +48,4 @@ async function callOpenRouter(prompt: string): Promise<string> {
 }
 
 export default handleSocketConnection;
+export { callOpenRouter };

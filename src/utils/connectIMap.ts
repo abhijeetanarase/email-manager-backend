@@ -4,6 +4,8 @@ import Email from '../model/email';
 import { simpleParser } from 'mailparser';
 require('dotenv').config(); // Ensure you have dotenv installed and configured
 import cloudinary from 'cloudinary';
+import makeCategoryPrompt from './categoryPrompt';
+import { callOpenRouter } from './replyGeneration';
 
 
 interface EmailConfig {
@@ -171,14 +173,29 @@ async function uploadAttachmentToCloudinary(buffer: Buffer, filename: string, co
               const date = parsed.date ? parsed.date.toISOString() : new Date().toISOString();
 
               // Store in DB
-              await Email.create({
-                from, // do NOT stringify
-                to,   // do NOT stringify
+               const prompt:string = makeCategoryPrompt(parsed.text || parsed.html || parsed.textAsHtml || '');
+               const res = await callOpenRouter(prompt);
+               const startIndex = res.indexOf('{');
+               const endIndex = res.lastIndexOf('}');
+               console.log(`📄 Category response: ${res}`);
+               
+
+               const  categories = JSON.parse(res.slice(startIndex,endIndex + 1));
+         
+               await Email.create({
+                from, 
+                to,   
                 subject: parsed.subject || '',
                 body: parsed.html || parsed.textAsHtml || parsed.text || '',
                 receivedAt: date,
-                credential: credId, // Set the credential ObjectId if available
-                category: 'Interested', // Or your categorization logic
+                credential: credId, 
+                contentType:categories.contentType || 'Text-only',
+                purpose: categories.purpose || 'Personal',
+                senderType: categories.senderType || 'Human',
+                priority: categories.priority || 'Normal',
+                actionRequired: categories.actionRequired || 'Informational Only',
+                topicDepartment: categories.topicDepartment || '',
+                timeSensitivity: categories.timeSensitivity || 'Evergreen',
                 folder,
                 snippet,
                 read,
