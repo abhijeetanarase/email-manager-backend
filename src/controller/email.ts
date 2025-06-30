@@ -24,7 +24,7 @@ export const getEmailsByCredentialId = async (
   try {
     const userId = req.userId;
     const credentialId = req.params.id;
-    const  {search="",n=20 , p=1 }:EmailQuery = req.query;
+    const { search = "", n = 20, p = 1 }: EmailQuery = req.query;
 
     // Ensure the credential belongs to the user
     const cred = await EmailCredential.findOne({
@@ -37,15 +37,15 @@ export const getEmailsByCredentialId = async (
         .json({ message: "Credential not found or not authorized" });
     }
 
-    const filters = { credential: credentialId , subject : { $regex: search , $options: 'i' } }
+    const filters = { credential: credentialId, subject: { $regex: search, $options: 'i' } }
 
     const emails = await Email.find(filters)
-      .skip((p-1)*n)
+      .skip((p - 1) * n)
       .limit(n)
       .sort({ receivedAt: -1 });
     const totalCount = await Email.countDocuments(filters);
     const totalPages = Math.ceil(totalCount / n);
-    res.json({ emails , totalCount , totalPages , currentPage: p });
+    res.json({ emails, totalCount, totalPages, currentPage: p });
   } catch (error) {
     res.status(500).json({ message: "Error fetching emails", error });
   }
@@ -75,9 +75,9 @@ export const sendMail = async (req: AuthenticatedRequest, res: Response) => {
     // Setup nodemailer transporter
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
-      port:465 ,
-      secure: true, 
-      service: "gmail", 
+      port: 465,
+      secure: true,
+      service: "gmail",
       auth: {
         user: emailCred.email,
         pass: emailCred.password,
@@ -97,7 +97,7 @@ export const sendMail = async (req: AuthenticatedRequest, res: Response) => {
 
     // Save the sent email in the Email collection
     const email = new Email({
-      from: { name:user?.name, email: emailCred.email },
+      from: { name: user?.name, email: emailCred.email },
       to: Array.isArray(to)
         ? to.map((e: string) => ({ name: "", email: e }))
         : [{ name: "", email: to }],
@@ -117,30 +117,64 @@ export const sendMail = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-export const starEmail = async (req: AuthenticatedRequest, res: Response) => {
+export const starTrashArchiveEmail = async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.userId;
   const emailId = req.params.emailId;
-  const { starred } = req.body;
+  const { type } = req.body;
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  if (typeof starred !== "boolean") {
-    return res.status(400).json({ message: "Missing or invalid 'starred' value" });
-  }
   try {
-    // Find the email and ensure it belongs to a credential owned by the user
-    const email = await Email.findOneAndUpdate(
-      { _id: emailId },
-      { $set: { starred } },
-      { new: true }
-    );
+    let email = null;
 
-    if (!email || !email.credential) {
-      return res.status(404).json({ message: "Email not found or not authorized" });
+    if (type === 'starred') {
+      email = await Email.findOneAndUpdate(
+        { _id: emailId },
+        { $set: { starred: true } },
+        { new: true }
+      );
+    } else if (type === 'unstarred') {
+      email = await Email.findOneAndUpdate(
+        { _id: emailId },
+        { $set: { starred: false } },
+        { new: true }
+      );
+    } else if (type === 'trash') {
+      email = await Email.findOneAndUpdate(
+        { _id: emailId },
+        { $set: { folder: 'trash' } },
+        { new: true }
+      );
+    } else if (type === 'archive') {
+      email = await Email.findOneAndUpdate(
+        { _id: emailId },
+        { $set: { folder: 'archive' } },
+        { new: true }
+      );
+    } else if (type === 'removetrash' || type === 'removearchive') {
+      email = await Email.findOneAndUpdate(
+        { _id: emailId },
+        { $set: { folder: 'inbox' } },
+        { new: true }
+      );
+    } else if (type === 'delete') {
+      email = await Email.findOneAndDelete(
+        { _id: emailId }
+      );
+    } else if (type === 'read') {
+      email = await Email.findOneAndUpdate(
+        { _id: emailId },
+        { $set: { read: true } },
+        { new: true }
+      );
     }
 
-    res.json({ message: `Email ${starred ? "starred" : "unstarred"}`, email });
+    if (!email) {
+      return res.status(404).json({ message: "Email not found" });
+    }
+    res.status(200).json({ success : true, email });
+
   } catch (error) {
-    res.status(500).json({ message: "Error updating starred status", error });
+    res.status(500).json({ message: "Error to Updating status", error });
   }
 };
