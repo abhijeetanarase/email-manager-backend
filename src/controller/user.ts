@@ -98,11 +98,8 @@ export const checkAuth = async (req: any, res: Response) => {
   }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: string };
-    const user = await User.findById(decoded.id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    res.json({ isAuthenticated: true, user });
+
+    res.status(200).json({ isAuthenticated: true,  });
   }
   catch (err) {
     console.error("JWT verification failed:", err);

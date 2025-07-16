@@ -47,7 +47,7 @@ const EmailSchema = new Schema<IEmail>({
   body: { type: String },
   receivedAt: { type: String, default: () => new Date().toISOString() },
   credential: { type: Schema.Types.ObjectId, ref: 'EmailCredential', required: true },
-  folder: { type: String, default: 'inbox' },
+  folder: { type: String, default: 'inbox' , enum : ['archive','trash' ,'inbox'] },
   snippet: { type: String },
   read: { type: Boolean },
   starred: { type: Boolean },

@@ -3,7 +3,7 @@ import Email from "../model/email";
 import EmailCredential from "../model/emailcred";
 import nodemailer from "nodemailer";
 import User from "../model/user";
-
+import mongoose from "mongoose";
 
 
 // Extend Request to include userId
@@ -14,6 +14,7 @@ interface EmailQuery {
   search?: string;
   n?: number; // Number of items per page
   p?: number; // Page number
+  folder?: string; // यहाँ ? जोड़ें
 }
 
 // GET /api/email/:credentialId
@@ -24,7 +25,7 @@ export const getEmailsByCredentialId = async (
   try {
     const userId = req.userId;
     const credentialId = req.params.id;
-    const { search = "", n = 20, p = 1 }: EmailQuery = req.query;
+    const { search = "", n = 20, p = 1 , folder = "inbox" }: EmailQuery = req.query;
 
     // Ensure the credential belongs to the user
     const cred = await EmailCredential.findOne({
@@ -37,7 +38,7 @@ export const getEmailsByCredentialId = async (
         .json({ message: "Credential not found or not authorized" });
     }
 
-    const filters = { credential: credentialId, subject: { $regex: search, $options: 'i' } }
+    const filters = { credential: credentialId, subject: { $regex: search, $options: 'i' } , folder }
 
     const emails = await Email.find(filters)
       .skip((p - 1) * n)
@@ -176,5 +177,89 @@ export const starTrashArchiveEmail = async (req: AuthenticatedRequest, res: Resp
 
   } catch (error) {
     res.status(500).json({ message: "Error to Updating status", error });
+  }
+};
+
+export const bulkUpdateEmails = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId;
+  const { emailIds, action } = req.body; // emailIds: string[], action: 'archive' | 'trash'
+
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  if (!Array.isArray(emailIds) || !emailIds.length) {
+    return res.status(400).json({ message: "emailIds array required" });
+  }
+  if (!['archive', 'trash','inbox'].includes(action)) {
+    return res.status(400).json({ message: "Invalid action" });
+  }
+
+  try {
+    const update = { folder: action };
+    const result = await Email.updateMany(
+      { _id: { $in: emailIds } },
+      { $set: update }
+    );
+    res.status(200).json({ success: true, modifiedCount: result.modifiedCount });
+  } catch (error) {
+    res.status(500).json({ message: "Bulk update failed", error });
+  }
+};
+
+export const getEmailCounts = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const credentialId = req.params.id;
+    const folder = req.query.folder as string; // frontend से भेजा गया folder
+
+    // Credential check
+    const cred = await EmailCredential.findOne({
+      _id: credentialId,
+      createdBy: userId,
+    });
+    if (!cred) {
+      return res.status(404).json({ message: "Credential not found or not authorized" });
+    }
+
+    // Aggregation filter
+    const matchFilter: any = { credential: cred._id };
+    if (folder) {
+      matchFilter.folder = folder;
+    }
+
+    // Folders count (optional: अगर सभी folders के counters चाहिए)
+    const folderCounts = await Email.aggregate([
+      { $match: { credential: cred._id } },
+      { $group: { _id: "$folder", count: { $sum: 1 } } }
+    ]);
+
+    // Categories count (selected folder के लिए)
+    const categories = [
+      'contentType',
+      'purpose',
+      'priority',
+      'actionRequired',
+      'timeSensitivity',
+      'senderType'
+    ];
+    const categoryCounts: Record<string, Record<string, number>> = {};
+    for (const category of categories) {
+      const counts = await Email.aggregate([
+        { $match: matchFilter },
+        { $group: { _id: { $ifNull: [ `$${category}`, 'unknown' ] }, count: { $sum: 1 } } }
+      ]);
+      categoryCounts[category] = {};
+      counts.forEach(item => {
+        const key = item._id || 'unknown';
+        categoryCounts[category][key] = item.count;
+      });
+    }
+
+    res.json({
+      folderCounts: Object.fromEntries(folderCounts.map(f => [f._id, f.count])),
+      categoryCounts
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching counts", error });
   }
 };
