@@ -25,7 +25,7 @@ export const getEmailsByCredentialId = async (
   try {
     const userId = req.userId;
     const credentialId = req.params.id;
-    const { search = "", n = 20, p = 1 , folder = "inbox" }: EmailQuery = req.query;
+    const { search = "", n = 20, p = 1, folder = "inbox" }: EmailQuery = req.query;
 
     // Ensure the credential belongs to the user
     const cred = await EmailCredential.findOne({
@@ -38,7 +38,21 @@ export const getEmailsByCredentialId = async (
         .json({ message: "Credential not found or not authorized" });
     }
 
-    const filters = { credential: credentialId, subject: { $regex: search, $options: 'i' } , folder }
+    // --- नया filters logic ---
+    const allowedFilters = ['contentType', 'purpose', 'priority', 'actionRequired', 'timeSensitivity', 'senderType'];
+    const filters: any = { credential: credentialId, folder, subject: { $regex: search, $options: 'i' } };
+
+    allowedFilters.forEach((key) => {
+      const value = req.query[key];
+      if (value) {
+        if (Array.isArray(value)) {
+          filters[key] = { $in: value };
+        } else {
+          filters[key] = value;
+        }
+      }
+    });
+    // --- filters logic खत्म ---
 
     const emails = await Email.find(filters)
       .skip((p - 1) * n)

@@ -3,6 +3,7 @@ import EmailCredential from "../model/emailcred";
 import { startWatchingAllEmails } from "../utils/connectIMap";
 import sendSlackNotification from "../utils/slackNotifier";
 import { saveInboxEmailsLast30Days } from "../utils/saveEmail";
+import nodemailer from "nodemailer";
 
 // Extend Request to include userId
 interface AuthenticatedRequest extends Request {
@@ -24,6 +25,23 @@ export const createCredential = async (
       return res
         .status(400)
         .json({ message: "Email already exists for this user" });
+
+    // Transporter verify
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      service: "gmail",
+      auth: {
+        user: email,
+        pass: password,
+      },
+    });
+    try {
+      await transporter.verify();
+    } catch (verifyError) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
     const cred = await EmailCredential.create({
       email,
